@@ -112,3 +112,38 @@ function attempt_parse_args(arglist)
 
 	return {args: arguments, isError: false, argind: -1, errmsg: ""};
 }
+
+function arithmethic_parsing(line){
+	//return log error if parentheses do not match up
+	if(is_balanced(line)==false){
+		console.log("Expression not balanced");
+	}
+}
+
+//stack implementation of balanced parentheses
+//https://paulrohan.medium.com/parenthesis-matching-problem-in-javascript-the-hacking-school-hyd-7d7708278911
+function is_balanced(line){
+    let stack = [];
+    let matching = {
+        '(': ')',
+        '[': ']',
+        '{': '}'
+	}	
+    for (let i = 0; i < line.length; i++) {
+        // If character is an opening brace add it to a stack
+        if (line[i] === '(' || line[i] === '{' || line[i] === '[' ) {
+            stack.push(line[i]);
+        }
+        //  If that character is a closing brace, pop from the stack, which will also reduce the length of the stack each time a closing bracket is encountered.
+        else {
+            let last = stack.pop();
+
+            //If the popped element from the stack, which is the last opening brace doesn’t match the corresponding closing brace in the map, then return false
+            if (line[i] !== matching[last]) {return false};
+        }
+    }
+    // By the completion of the for loop after checking all the brackets of the str, at the end, if the stack is not empty then fail
+        if (stack.length !== 0) {return false};
+
+    return true;
+}
