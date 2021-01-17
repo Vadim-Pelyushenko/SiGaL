@@ -28,6 +28,7 @@ let program_lines = null;
 //     * done
 // - array declaration: {var_type: , arr_name: , expressions: }
 //     expressions for dimension sizes
+//     * done
 // - return statement: {expression: }
 //     expression optional
 //     * done
@@ -123,6 +124,7 @@ function lex_block(body)
 	let statements = [];
 
 	let linenum = 0;
+	// console.log("Body length: " + body.length);
 	while(linenum < body.length)
 	{
 		let line = body[linenum];
@@ -182,9 +184,34 @@ function lex_block(body)
 			continue;
 		}
 
+		let condchain_info = attempt_parse_condchain(body, linenum);
+		if(condchain_info)
+		{
+			let exprs = condchain_info.expressions;
+			let bodies = condchain_info.bodies;
+			linenum = condchain_info.nextlinenum;
+			
+			let lexed_bodies = [];
+			for(let i = 0; i < bodies.length; i++)
+			{
+				let lb = lex_block(bodies[i]);
+				if(lb)
+					lexed_bodies.push(lb);
+				else
+					lexed_bodies.push(bodies[i]);
+			}
+
+			// One more body than expression if there's an else statement
+			let condchain_statement = {kind: "condchain", expressions: exprs,
+											bodies: lexed_bodies};
+			statements.push(condchain_statement);
+		}
+
 		let dunno_statement = {kind: "dunno", body: line};
 		statements.push(dunno_statement);
 	}
+
+	console.log("Here");
 
 	return statements;
 }
@@ -251,7 +278,7 @@ function scan_for_functions(game_code)
 
 			let signature = create_signature_string(arguments,func_tokens[2]);
 			let func_start = linenum + 1;
-			let func_end = find_closing_brace(func_start);
+			let func_end = find_closing_brace(program_lines, func_start);
 
 			if(func_end == -1)
 			{
@@ -295,6 +322,74 @@ function scan_for_functions(game_code)
 	}
 
 	return true;
+}
+
+function attempt_parse_condchain(body, linenum)
+{
+	let line = body[--linenum].trim();
+	let regex_elseif = /else if\((.*)\)/;
+	let partial_match = line.match(/^if\((.*)\)$/);
+
+	// console.log("Partial: " + partial_match);
+	if(!partial_match)
+		return false;
+
+	let expressions = [];
+	let bodies = [];
+
+	let if_start = linenum + 1;
+	if(body[if_start].trim() !== "{")
+		return false;
+	let if_end = find_closing_brace(body, if_start);
+	
+	if(if_end < 0)
+		return false;
+
+	expressions.push(partial_match[1]);
+	bodies.push(lines_in_range(body, if_start + 1, if_end - 1));
+
+	linenum = if_end + 1;
+	while(linenum < body.length && (partial_match = body[linenum].match(regex_elseif)))
+	{
+		let body_start = linenum + 1;
+		if(body_start >= body.length || body[body_start].trim() !== "{")
+		{
+			console.log("Something has gone wrong,");
+			console.log("else if statement doesn't have opening brace");
+			return false;
+		}
+
+		let body_end = find_closing_brace(body, body_start);
+		if(body_end < 0)
+			return false;
+
+		expressions.push(partial_match[1]);
+		bodies.push(lines_in_range(body, body_start + 1, body_end - 1));
+		linenum = body_end + 1;
+	}
+
+	if(linenum < body.length)
+	{
+		partial_match = body[linenum].match(/else/);
+		if(partial_match)
+		{
+			let else_start = linenum + 1;
+			if(else_start >= body.length || body[else_start].trim() !== "{")
+			{
+				console.log("Something has gone wrong,");
+				console.log("else statement doesn't have opening brace");
+				return false;
+			}
+
+			let else_end = find_closing_brace(body, else_start);
+			if(else_end < 0)
+				return false;
+
+			bodies.push(lines_in_range(body, else_start + 1, else_end - 1));
+		}
+	}
+
+	return {expressions: expressions, bodies: bodies, nextlinenum: linenum};
 }
 
 // See: https://regexr.com/5kdhg
@@ -444,20 +539,20 @@ function attempt_parse_args(arglist)
 
 // Utility functions
 
-function find_closing_brace(line_start)
+function find_closing_brace(body, line_start)
 {
-	let first_line = program_lines[line_start];
+	let first_line = body[line_start];
 	first_line = ignore_comment(first_line).trim();
 	if(first_line !== "{")
 		return -1;
 
 	let depth = 1;
 	let linenum = line_start;
-	while(depth != 0 && linenum < program_lines.length)
+	while(depth != 0 && linenum < body.length)
 	{
 		linenum++;
 
-		let line = program_lines[linenum];
+		let line = body[linenum];
 		line = ignore_comment(line).trim();
 
 		if(line === "{")
