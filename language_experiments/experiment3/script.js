@@ -26,7 +26,7 @@ let program_lines = null;
 // - variable declaration: {var_type: , var_name: , expression: }
 //     expression optional
 //     * done
-// - array declaration: {data_type: , arr_name: , expressions: }
+// - array declaration: {var_type: , arr_name: , expressions: }
 //     expressions for dimension sizes
 // - return statement: {expression: }
 //     expression optional
@@ -173,6 +173,15 @@ function lex_block(body)
 			continue;
 		}
 
+		let arraydec_tokens = attempt_parse_arraydec(line);
+		if(arraydec_tokens)
+		{
+			let arraydec_statement = {kind: "arraydec", var_type: arraydec_tokens[1],
+					array_name: arraydec_tokens[2], expressions: arraydec_tokens.slice(3)};
+			statements.push(arraydec_statement);
+			continue;
+		}
+
 		let dunno_statement = {kind: "dunno", body: line};
 		statements.push(dunno_statement);
 	}
@@ -309,6 +318,56 @@ function attempt_parse_vardec(line)
 	return line.match(/([a-zA-Z]\w*) ([a-zA-Z]\w*);/);
 }
 
+function attempt_parse_arraydec(line)
+{
+	let partial_match = line.match(/([a-zA-Z]\w*)(\[.*\]) ([a-zA-Z]\w*);/);
+
+	if(!partial_match)
+		return false;
+	let var_type = partial_match[1];
+	let array_name = partial_match[3];
+	let bracketsstr = partial_match[2];
+
+	let match = [];
+	match.push(line);
+	match.push(var_type);
+	match.push(array_name);
+
+	let curr_brackargstr = "";
+	let depth = 1;
+
+	for(let i = 1; i < bracketsstr.length && depth >= 0; i++)
+	{
+		let curr_char = bracketsstr.charAt(i);
+
+		if(curr_char === "]" && depth == 1)
+		{
+			match.push(curr_brackargstr);
+			curr_brackargstr = "";
+			depth--;
+			continue;
+		}
+		else if(curr_char === "]")
+			depth--;
+		else if(curr_char === "["){
+			depth++;
+			if(depth == 1)
+				continue;
+		}
+
+		curr_brackargstr += curr_char;
+	}
+
+	if(depth != 0)
+	{
+		console.log("Something has gone wrong,");
+		console.log("Lexing finds that input string \"" + line + "\" has imbalanced brackets");
+		return false;
+	}
+	
+	return match;
+}
+
 // How to know you're moving onto next argument rather than still in
 // an expression when you come across a comma? Check if you are inside
 // an expression by tracking your depth.
@@ -337,9 +396,9 @@ function attempt_parse_funcinvoke(line)
 			curr_argstr = "";
 			continue;
 		}
-		else if(curr_char == "(")
+		else if(curr_char === "(")
 			depth++;
-		else if(curr_char == ")")
+		else if(curr_char === ")")
 			depth--;
 
 		curr_argstr += curr_char;
